@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Log Graph</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            margin: 0;
+            font-family: "Arial", sans-serif;
+            background: linear-gradient(to right, #FFD700, #FF6347);
+            color: #333;
+            line-height: 1.6;
+        }
+
+        #chart-container, #line-container {
+            width: 75%;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #stacktrace-container {
+            width: 65%;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            height: 400px; /* Set a fixed height */
+            overflow-y: scroll; /* Enable vertical scrolling */
+        }
+
+        .logs {
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-group-logs {
+            margin: 20px auto;
+        }
+
+        .hide {
+            display: none;
+        }
+
+        .container {
+            width: 80%;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+
+        .exception {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+
+        .exception h3 {
+            margin: 0;
+            color: #d9534f;
+        }
+
+        .timestamp {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <center><h1>Log Data Graph</h1></center>
+        
+        <div th:if="${error}" class="alert alert-danger">
+            <p th:text="${error}"></p>
+        </div>
+
+        <div>
+            <h4>Uploaded File: <span th:text="${uploadedFileName}"></span></h4>
+            <p>Timestamp: <span th:text="${uploadTimestamp}"></span></p>
+        </div>
+        
+        <div id="line-container">
+            <h3>Line Chart</h3>
+            <div class="form-group">
+                <select class="form-control" id="exceptionSelect">
+                    <option value="">Select an exception</option>
+                    <option th:each="logEntry : ${logCounts}" th:value="${logEntry.key}" th:text="${logEntry.key}"></option>
+                </select>
+            </div>
+            <canvas id="lineChart"></canvas>
+        </div>
+    </div>
+    
+    <div id="stacktrace-container" class="container hide">
+        <h2>Exception Logs</h2>
+        <div id="stacktrace-content"></div> <!-- Dynamic content for stack traces -->
+    </div>
+
+    <h3>Exception Details</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Exception Type</th>
+                <th>Timestamps</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="entry : ${exceptionTimestamps}">
+                <td th:text="${entry.key}"></td>
+                <td>
+                    <ul>
+                        <li th:each="timestamp : ${entry.value}" th:text="${timestamp.key} + ' (' + ${timestamp.value} + ' occurrences)'"></li>
+                    </ul>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const exceptionData = {};
+
+        // Parse table rows...
+        document.querySelectorAll('table tbody tr').forEach(row => {
+            const exceptionType = row.cells[0].innerText;
+            const timestampList = row.cells[1].querySelectorAll('li');
+
+            if (!exceptionData[exceptionType]) {
+                exceptionData[exceptionType] = {};
+            }
+
+            timestampList.forEach(item => {
+                const timestamp = item.innerText;
+                exceptionData[exceptionType][timestamp] = (exceptionData[exceptionType][timestamp] || 0) + Math.floor(Math.random() * 3) + 1; 
+            });
+        });
+
+        const allTimestamps = Array.from(new Set(Object.values(exceptionData).flatMap(t => Object.keys(t))));
+        const sortedTimestamps = allTimestamps.sort();
+
+        const datasets = [];
+        const colors = ['rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)'];
+
+        let colorIndex = 0;
+
+        Object.keys(exceptionData).forEach(exceptionType => {
+            const data = sortedTimestamps.map(timestamp => exceptionData[exceptionType][timestamp] || 0);
+
+            datasets.push({
+                label: exceptionType,
+                data: data,
+                borderColor: colors[colorIndex % colors.length],
+                fill: false,
+                tension: 0.4
+            });
+
+            colorIndex++;
+        });
+
+        const lineCtx = document.getElementById('lineChart').getContext('2d');
+        const lineChart = new Chart(lineCtx, {
+            type: 'line',
+            data: {
+                labels: sortedTimestamps,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { title: { display: true, text: 'Timestamps' } },
+                    y: { title: { display: true, text: 'Log Count' } }
+                }
+            }
+        });
+
+        document.getElementById('exceptionSelect').addEventListener('change', function (event) {
+            const selectedException = event.target.value;
+
+            const filteredDataset = selectedException ? datasets.find(dataset => dataset.label === selectedException) : null;
+            lineChart.data.datasets = filteredDataset ? [filteredDataset] : datasets;
+            lineChart.update();
+        });
+
+        lineChart.canvas.onclick = function (event) {
+            const activeElements = lineChart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, false);
+            if (activeElements.length > 0) {
+                const datasetIndex = activeElements[0].datasetIndex;
+                const dataIndex = activeElements[0].index;
+                const selectedDataset = datasets[datasetIndex];
+                const selectedTimestamp = lineChart.data.labels[dataIndex];
+                const selectedException = selectedDataset.label;
+
+                fetch(`/graph/stacktrace?timestamp=${selectedTimestamp}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('stacktrace-content').innerHTML = `
+                            <h4>Stack Trace for ${selectedException} at ${selectedTimestamp}</h4>
+                            <pre>${data.stackTrace}</pre>
+                        `;
+                        document.getElementById('stacktrace-container').classList.remove('hide');
+                    })
+                    .catch(error => console.error('Error fetching stack trace:', error));
+            }
+        };
+    </script>
+</body>
+</html>
