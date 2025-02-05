@@ -30,8 +30,10 @@
             border-radius: 20px;
         }
         .stacktrace {
-        
-          padding: 60px;         
+          text-align: left;  /* Align text to the left */
+          white-space: pre-wrap;  /* Preserve line breaks and spacing */
+          font-family: monospace;  /* Use monospace for better readability */
+          padding: 65px;         
           border-radius: 10px;  
           margin-top: 10px;       
           width: 100%;            
@@ -146,14 +148,10 @@
                 Object.keys(stackTraceData[timestamp]).forEach(exception => {
                     stackTraceHTML += `<h5>${exception}</h5>`;
                     stackTraceData[timestamp][exception].forEach(trace => {
-                        
                         let formattedTrace = trace.split('\n').map(line => {
-                            // Ensure the "at" appears on a new line with appropriate spacing
-                            if (line.trim().startsWith("at")) {
-                                return `<br>${line.trim()}`;
-                            }
-                            return line.trim();
-                        }).join(''); // Join back into a single string
+                            return line.trim(); // Ensure proper spacing
+                        }).join('\n'); // Keep proper new line formatting
+
                         stackTraceHTML += `<pre class="stacktrace">${formattedTrace}</pre>`;
                     });
                 });
@@ -162,6 +160,7 @@
                 stacktraceContainer.innerHTML += `<p>No stack traces available for this timestamp.</p>`;
             }
         }
+
 
     </script>
 </body>
