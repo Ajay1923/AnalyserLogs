@@ -49,6 +49,11 @@
     <div class="container">
         <div class="graph-container">
             <h3>Exception Occurrences Over Time</h3>
+            <label for="fileFilter">Select File:</label>
+            <select id="fileFilter" onchange="updateGraph()">
+                <option value="all">All</option>
+                <option th:each="filename : ${filenames}" th:value="${filename}" th:text="${filename}"></option>
+            </select>
             <label for="exceptionFilter">Select Exception Type:</label>
             <select id="exceptionFilter" onchange="updateGraph()">
                 <option value="all">All</option>
@@ -88,6 +93,7 @@
         
         function updateGraph() {
             let selectedException = exceptionFilter.value;
+            let selectedFile = document.getElementById("fileFilter").value;
             let datasets = [];
             
             if (selectedException === "all") {
@@ -141,27 +147,24 @@
         
         function displayStackTrace(timestamp) {
             let stacktraceContainer = document.getElementById('stacktrace-container');
-            stacktraceContainer.innerHTML = '<h3>Stack Traces</h3>'; // Reset content
+            stacktraceContainer.innerHTML = ''; // Clear previous content
 
             if (stackTraceData[timestamp]) {
-                let stackTraceHTML = `<h4>${timestamp}</h4>`;
+                let stackTraceHTML = '';
                 Object.keys(stackTraceData[timestamp]).forEach(exception => {
-                    stackTraceHTML += `<h5>${exception}</h5>`;
+                    
+                    stackTraceHTML += `<h5 style="margin-bottom: 3px; font-size: 20px; font-weight: bold;">Filtered ${exception}</h5>`; 
+                    stackTraceHTML += `<h5 style="margin-bottom: 1px; font-size: 18px; font-weight: bold; background-color: #00796b; color: white; padding: 5px 50px; text-align: left; margin-top: 10px; border-radius: 5px; width: 100%;">Error Entry</h5>`;
                     stackTraceData[timestamp][exception].forEach(trace => {
-                        let formattedTrace = trace.split('\n').map(line => {
-                            return line.trim(); // Ensure proper spacing
-                        }).join('\n'); // Keep proper new line formatting
-
-                        stackTraceHTML += `<pre class="stacktrace">${formattedTrace}</pre>`;
+                        let formattedTrace = trace.split('\n').map(line => line.trim()).join('\n');
+                        stackTraceHTML += `<pre class="stacktrace" style="margin-top: 5px; padding: 10px; ">${formattedTrace}</pre>`; // Improved padding and background color for clarity
                     });
                 });
-                stacktraceContainer.innerHTML += stackTraceHTML;
+                stacktraceContainer.innerHTML = stackTraceHTML;
             } else {
-                stacktraceContainer.innerHTML += `<p>No stack traces available for this timestamp.</p>`;
+                stacktraceContainer.innerHTML = `<p>No stack traces available for this timestamp.</p>`;
             }
         }
-
-
     </script>
 </body>
 </html>
