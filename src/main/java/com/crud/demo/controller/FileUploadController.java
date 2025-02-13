@@ -36,15 +36,12 @@ public class FileUploadController {
     private List<String> detailedErrorLogs;
     private List<String> downloadedFilenames = new ArrayList<>();
     
-
-
     @Autowired
     private StatisticsFinalService statisticsFinalService;
 
     @Autowired
     private HttpSession httpSession;
 	
-
     @GetMapping("/")
     public String index() {
         return "webpage";
@@ -175,16 +172,100 @@ public class FileUploadController {
         return "webpage";
     }
 
-    private Long getCurrentUserId() {
-		// TODO Auto-generated method stub
+    private Long getCurrentUserId() {		
 		return null;
 	}
 
-	@PostMapping("/searchExceptionData")
-    public String searchExceptionData(@RequestParam("query") String query, Model model) {
+    @PostMapping("/uploadFolder")
+    public String uploadLogFolder(@RequestParam("logfolder") MultipartFile[] files, Model model) {
+        Long userId = getCurrentUserId();
+
+        // Check if files are null or empty
+        if (files == null || files.length == 0) {
+            model.addAttribute("error", "Please select a folder containing log files.");
+            return "webpage";
+        }
+        Map<String, List<String>> logsPerFile = new HashMap<>();
+        List<String> allLines = new ArrayList<>();
+        List<String> filenames = new ArrayList<>();
+        StringBuilder downloadedExceptions = new StringBuilder();
+        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+
+        try {
+            for (MultipartFile file : files) {
+                if (file.isEmpty()) continue;            
+                String filename = file.getOriginalFilename();
+                filenames.add(filename);
+                // Read the file content and collect the lines
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
+                    List<String> lines = reader.lines().collect(Collectors.toList());
+                    allLines.addAll(lines);
+                    logsPerFile.put(filename, lines);
+                }
+            }
+            Map<String, Integer> counts = countLogOccurrences(allLines);
+            Map<String, Integer> filteredCounts = counts.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            allLogs = allLines;
+            detailedErrorLogs = extractDetailedErrorLogs(allLines);
+
+            String uploadedFileName = "Folder: " + String.join(", ", filenames);
+            // Save data into session or wherever needed
+            httpSession.setAttribute("logsPerFile", logsPerFile); 
+            httpSession.setAttribute("uploadedFileName", uploadedFileName);
+            httpSession.setAttribute("logCounts", filteredCounts);
+            httpSession.setAttribute("uploadTimestamp", timestamp);
+            httpSession.setAttribute("allLogs", allLogs);
+            httpSession.setAttribute("detailedErrorLogs", detailedErrorLogs);
+            httpSession.setAttribute("filenames", filenames); // Store file names in session
+
+            // Add model attributes for the view
+            model.addAttribute("filenames", filenames);
+            model.addAttribute("uploadedFileName", uploadedFileName);
+            model.addAttribute("counts", filteredCounts);
+            model.addAttribute("allLogs", allLogs);
+            model.addAttribute("detailedErrorLogs", detailedErrorLogs);
+            model.addAttribute("timestamp", timestamp);
+            model.addAttribute("filenames", filenames); // Add file names to the model
+
+            // Save statistics (your custom logic here)
+            statisticsFinalService.saveStatistics(
+                userId,
+                uploadedFileName,
+                null,
+                filteredCounts.getOrDefault("AccessException", 0),
+                filteredCounts.getOrDefault("CloudClientException", 0),
+                filteredCounts.getOrDefault("InvalidFormatException", 0),
+                filteredCounts.getOrDefault("NullPointerException", 0),
+                filteredCounts.getOrDefault("SchedulerException", 0),
+                filteredCounts.getOrDefault("SuperCsvException", 0),
+                filteredCounts.getOrDefault("ValidationException", 0),
+                filteredCounts.getOrDefault("ERROR", 0),
+                filteredCounts.getOrDefault("INFO", 0),
+                filteredCounts.keySet().toString(),
+                "Uploaded",
+                String.join(", ", filteredCounts.keySet())
+            );
+
+        } catch (IOException e) {
+            model.addAttribute("error", "Failed to process files: " + e.getMessage());
+        }
+
+        return "webpage";  // Return the name of your webpage/view
+    }
+
+    @PostMapping("/searchExceptionData")
+    public String searchExceptionData(@RequestParam("query") String query, Model model, HttpSession httpSession) {
+        List<String> responses = (List<String>) httpSession.getAttribute("searchResponses");
+        if (responses == null) {
+            responses = new ArrayList<>();
+        }
         String response = handleSearchQuery(query, (List<String>) httpSession.getAttribute("allLogs"));
-        
-        model.addAttribute("response", response);
+        responses.add(response);
+        httpSession.setAttribute("searchResponses", responses);
+        model.addAttribute("responses", responses);
+
         return "chat";
     }
 
@@ -209,7 +290,7 @@ public class FileUploadController {
                    "Ask for exception counts\n" +
                    "Ask for ERROR, INFO, or DEBUG counts\n" +
                    "Ask for a particular exception's stacktrace (e.g., 'NullPointerException stacktrace')\n" +
-                   "Just type your question!";
+                   "Just type your query!";
         } else {
             return searchInLogs(query, uploadedFileData);
         }
@@ -231,7 +312,6 @@ public class FileUploadController {
         response.append("ERROR: ").append(counts.getOrDefault("ERROR", 0)).append("\n");
         response.append("INFO: ").append(counts.getOrDefault("INFO", 0)).append("\n");
         response.append("DEBUG: ").append(counts.getOrDefault("DEBUG", 0)).append("\n");
-
         return response.toString();
     }
 
@@ -563,11 +643,15 @@ public class FileUploadController {
     }
 
     @GetMapping("/logAnalysisPage")
-    public String logAnalysisPage(Model model) {
+    public String logAnalysisPage(Model model, HttpSession session) {
         if (allLogs == null || allLogs.isEmpty()) {
             model.addAttribute("error", "No logs uploaded.");
             return "logAnalysisPage";
         }
+
+        // Retrieve file names from the session
+        List<String> filenames = (List<String>) session.getAttribute("filenames");
+        model.addAttribute("filenames", filenames);
 
         // Filter out DEBUG and INFO logs and group stack traces for ERROR logs
         List<String> filteredLogs = new ArrayList<>();
