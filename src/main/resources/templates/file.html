@@ -336,18 +336,36 @@
         
    
 
+  
     <div class="content">
         <div class="box-container">
-            <div class="box form-container">
-                <center><h2>Upload Log File</h2></center>
-                <form action="/upload" method="post" enctype="multipart/form-data">
-                    <label for="logfile">Select a log file:</label>
-                    <input type="file" id="logfile" name="logfile" accept=".log">
-                    <button type="submit">Upload</button>
-                </form>
+        <div class="box form-container">
+            <center><h2>Upload Log File</h2></center>
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <label for="logfile">Select a log file:</label>
+                <input type="file" id="logfile" name="logfile" accept=".log">
+                <button type="submit">Upload</button>
+            </form>
+            <form action="/uploadFolder" method="post" enctype="multipart/form-data">
+                <label for="logfolder">Select a folder:</label>
+                <input type="file" id="logfolder" name="logfolder" webkitdirectory directory multiple>
+                <button type="submit">Upload Folder</button>
+            </form>
+        </div>
+        
+           <div class="box file-list" th:if="${filenames}">
+            <center><h2>Uploaded Files Through  Folder</h2></center>
+            <div class="file-list-items">
+                <div th:each="filename : ${filenames}" 
+                     class="file-item" 
+                     th:text="${filename}"
+                     onclick="loadFileLogs(this.textContent)">
+                </div>
             </div>
+        </div>
+        
 
-           <div class="box log-counts" th:if="${counts}">
+   <div class="box log-counts" th:if="${counts}">
     <center><h2>Processed Log Details</h2></center>
     <table>
         <thead>
@@ -356,24 +374,29 @@
                 <th>Count</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="logCountsBody">
+            <!-- Dynamic log counts from JavaScript (for file upload) -->
+        </tbody>
+        
+        <!-- Thymeleaf-rendered log counts (for folder upload) -->
+        <tbody th:if="${counts}">
             <tr th:each="entry : ${counts}">
                 <td th:text="${entry.key}"></td>
                 <td>
                     <a href="#" th:data-type="${entry.key}" onclick="showFilteredLogs(this.dataset.type)">
                         <span th:text="${entry.value}"></span>
                     </a>
-                     
                 </td>
             </tr>
         </tbody>
     </table>
+    
     <div class="btn-group">
         <button class="btn" onclick="showSection('logs')">Show All Logs</button>
         <button class="btn" onclick="showSection('errorLogs')">Show Detailed Error Logs</button>
     </div>
 </div>
-        </div>
+</div>
 
         <div id="logs" class="logs hide">
             <h2>All Logs</h2>
@@ -439,12 +462,87 @@
 </div>
 
    <script>
+   function loadFileLogs(filename) {
+       fetch(`/getFileLogs?filename=${encodeURIComponent(filename)}`)
+           .then(response => response.json())
+           .then(data => {
+               // Update counts table
+               const countsTable = document.querySelector('#logCountsBody');
+               countsTable.innerHTML = '';
+               for (const [key, value] of Object.entries(data.counts)) {
+                   countsTable.innerHTML += `
+                       <tr>
+                           <td>${key}</td>
+                           <td>
+                               <a href="#" data-type="${key}" onclick="showFilteredLogs('${key}')">
+                                   ${value}
+                               </a>
+                           </td>
+                       </tr>
+                   `;
+               }
+
+               // Update all logs section
+               const allLogsBody = document.querySelector('#allLogsBody');
+               allLogsBody.innerHTML = data.allLogs.map(log => `
+                   <tr><td>${log}</td></tr>
+               `).join('');
+
+               // Update error logs section
+               const errorLogsBody = document.querySelector('#errorLogsBody');
+               errorLogsBody.innerHTML = data.detailedErrorLogs.map(log => `
+                   <tr><td>${log}</td></tr>
+               `).join('');
+
+               // Show the processed log details container
+               document.getElementById('logCountsContainer').classList.remove('hidden');
+           })
+           .catch(error => console.error('Error loading file logs:', error));
+   }
     function showSection(sectionId) {
         // Hide all log sections and button groups
         document.querySelectorAll('.logs').forEach(el => {
             el.classList.add('hide');
             el.classList.remove('centered');
         });
+        function loadFileLogs(filename) {
+    	    fetch(`/getFileLogs?filename=${encodeURIComponent(filename)}`)
+    	        .then(response => response.json())
+    	        .then(data => {
+    	            // Update counts table
+    	            const countsTable = document.querySelector('.log-counts tbody');
+    	            countsTable.innerHTML = '';
+    	            for (const [key, value] of Object.entries(data.counts)) {
+    	                countsTable.innerHTML += `
+    	                    <tr>
+    	                        <td>${key}</td>
+    	                        <td>
+    	                            <a href="#" data-type="${key}" onclick="showFilteredLogs('${key}')">
+    	                                ${value}
+    	                            </a>
+    	                        </td>
+    	                    </tr>
+    	                `;
+    	            }
+
+    	            // Update all logs section
+    	            const allLogsBody = document.querySelector('#logs tbody');
+    	            allLogsBody.innerHTML = data.allLogs.map(log => `
+    	                <tr><td>${log}</td></tr>
+    	            `).join('');
+
+    	            // Update error logs section
+    	            const errorLogsBody = document.querySelector('#errorLogs tbody');
+    	            errorLogsBody.innerHTML = data.detailedErrorLogs.map(log => `
+    	                <tr><td>${log}</td></tr>
+    	            `).join('');
+
+    	            // Show the processed log details container if hidden
+    	            document.querySelector('.log-counts').style.display = 'block';
+    	        })
+    	        .catch(error => console.error('Error loading file logs:', error));
+    	}
+
 
         // Hide all button groups
         document.querySelectorAll('.btn-group-logs').forEach(el => el.classList.add('hide'));
