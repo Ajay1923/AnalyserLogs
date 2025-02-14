@@ -262,6 +262,34 @@
     .btn-group .btn {
         margin: 0 10px;
     }
+    .file-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.file-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px;
+}
+
+.file-item {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.file-item:hover {
+    background-color: #f0f0f0;
+}
+
+.file-item.active {
+    background-color: #00796b;
+    color: white;
+}
 
     @media screen and (max-width: 500px) {
         .header {
@@ -282,15 +310,32 @@
         }
 
         .box-container {
-            flex-direction: column;
-        }
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
 
-        .box {
-            margin-right: 10px;
-            margin-bottom: 5px;
-            max-width: 100%;
-        }
-
+.box {
+    background: #ffffff;
+    padding: 10px;
+    border-radius: 12px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    flex: 1 1 50%;
+    margin: 20px;
+    margin-top: 60px;
+    min-width: 40px;
+    max-width: 30%;
+    height: 300px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.hidden {
+    display: none;
+}
         .form-container,
         .log-counts {
             max-height: 200px;
@@ -325,21 +370,14 @@
 <body>
     <div class="header">
         <span>Log File Analyser</span>
-       <!-- <button onclick="window.location.href='/logout'" class="logout-btn">Logout</button> -->
     </div>
     
     <div class="sidebar">
         <h2><a href="/webpage" class="active">File Upload</a></h2>
-        <h2><a href="/statistics" >Statistics</a></h2>
-        <!-- <h2> <a href="/settings">User Details</a></h2>
-        <h2><div th:if="${session.userRole != null and session.userRole.equalsIgnoreCase('Admin')}">
-        <a href="/allusers">All Users</a></div>
-        <div th:if="${session.userRole != null and !session.userRole.equalsIgnoreCase('Admin')}"></div></h2> -->
-        <!--  <h2><a href="/chat" target="_blank">Advanced Search</a></h2> -->
-        <h2> <a href="/logAnalysisPage" target="_blank">Graph</a></h2>
+        <h2><a href="/statistics">Statistics</a></h2>
+        <h2><a href="/logAnalysisPage" target="_blank">Graph</a></h2>
     </div>
    
-
     <div class="content">
         <div class="box-container">
             <div class="box form-container">
@@ -349,9 +387,26 @@
                     <input type="file" id="logfile" name="logfile" accept=".log">
                     <button type="submit">Upload</button>
                 </form>
+                <form action="/uploadFolder" method="post" enctype="multipart/form-data">
+                    <label for="logfolder">Select a folder:</label>
+                    <input type="file" id="logfolder" name="logfolder" webkitdirectory directory multiple>
+                    <button type="submit">Upload Folder</button>
+                </form>
             </div>
-
-           <div class="box log-counts" th:if="${counts}">
+            
+            
+            <div class="box file-list" th:if="${filenames}">
+                <center><h2>Uploaded Files Through Folder</h2></center>
+                <div class="file-list-items">
+                    <div th:each="filename : ${filenames}" 
+                         class="file-item" 
+                         th:text="${filename}"
+                         onclick="loadFileLogs(this.textContent)">
+                    </div>
+                </div>
+            </div>
+            
+  <div class="box log-counts" th:if="${counts}">
     <center><h2>Processed Log Details</h2></center>
     <table>
         <thead>
@@ -360,25 +415,30 @@
                 <th>Count</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="logCountsBody">
+            <!-- Dynamic log counts from JavaScript (for file upload) -->
+        </tbody>
+        
+        <!-- Thymeleaf-rendered log counts (for folder upload) -->
+        <tbody th:if="${counts}">
             <tr th:each="entry : ${counts}">
                 <td th:text="${entry.key}"></td>
                 <td>
                     <a href="#" th:data-type="${entry.key}" onclick="showFilteredLogs(this.dataset.type)">
                         <span th:text="${entry.value}"></span>
                     </a>
-                     
                 </td>
             </tr>
         </tbody>
     </table>
+    
     <div class="btn-group">
         <button class="btn" onclick="showSection('logs')">Show All Logs</button>
         <button class="btn" onclick="showSection('errorLogs')">Show Detailed Error Logs</button>
     </div>
 </div>
-        </div>
-
+</div>
+        
         <div id="logs" class="logs hide">
             <h2>All Logs</h2>
             <table>
@@ -387,13 +447,10 @@
                         <th>Log Entry</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <tr th:each="log : ${allLogs}">
-                        <td th:text="${log}"></td>
-                    </tr>
+                <tbody id="allLogsBody">
+                    <!-- All logs will be dynamically inserted here -->
                 </tbody>
             </table>
-           
         </div>
 
         <div id="errorLogs" class="logs hide">
@@ -404,68 +461,97 @@
                         <th>Error Entry</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <tr th:each="errorLog : ${detailedErrorLogs}">
-                        <td th:text="${errorLog}"></td>
-                    </tr>
+                <tbody id="errorLogsBody">
+                    <!-- Detailed error logs will be dynamically inserted here -->
                 </tbody>
             </table>
         </div>
+
+        <div id="filteredLogs" class="logs hide">
+            <h2 id="filteredLogsTitle">Filtered </h2> 
+            <table>
+                <thead>
+                    <tr>
+                        <th>Error Entry</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be dynamically inserted here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="btn-group-logs hide" id="downloadErrorLogsBtnGroup"> 
+            <center>
+                <a href="/downloadErrorLogs" class="btn" id="downloadDetailedLogsBtn">Download Error Logs</a>
+            </center>
+        </div>
+    </div>
+
+    <script>
+        function loadFileLogs(filename) {
+            fetch(`/getFileLogs?filename=${encodeURIComponent(filename)}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Update counts table
+                    const countsTable = document.querySelector('#logCountsBody');
+                    countsTable.innerHTML = '';
+                    for (const [key, value] of Object.entries(data.counts)) {
+                        countsTable.innerHTML += `
+                            <tr>
+                                <td>${key}</td>
+                                <td>
+                                    <a href="#" data-type="${key}" onclick="showFilteredLogs('${key}')">
+                                        ${value}
+                                    </a>
+                                </td>
+                            </tr>
+                        `;
+                    }
+
+                    // Update all logs section
+                    const allLogsBody = document.querySelector('#allLogsBody');
+                    allLogsBody.innerHTML = data.allLogs.map(log => `
+                        <tr><td>${log}</td></tr>
+                    `).join('');
+
+                    // Update error logs section
+                    const errorLogsBody = document.querySelector('#errorLogsBody');
+                    errorLogsBody.innerHTML = data.detailedErrorLogs.map(log => `
+                        <tr><td>${log}</td></tr>
+                    `).join('');
+
+                    // Show the processed log details container
+                    document.getElementById('logCountsContainer').classList.remove('hidden');
+                })
+                .catch(error => console.error('Error loading file logs:', error));
+        }
+
         
-   <div id="filteredLogs" class="logs hide">
-    <h2 id="filteredLogsTitle">Filtered </h2> 
-    <table>
-        <thead>
-            <tr>
-                <th>Error Entry</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Data will be dynamically inserted here -->
-        </tbody>
-    </table>
-</div>
+        function showSection(sectionId) {
+            // Hide all log sections and button groups
+            document.querySelectorAll('.logs').forEach(el => {
+                el.classList.add('hide');
+                el.classList.remove('centered');
+            });
 
-<div class="btn-group-logs hide" id="downloadFilteredLogsBtnGroup">
-    <center>
-        <button id="downloadFilteredErrorLogsBtn" type="button" class="btn">Download Filtered Logs</button>
-        
-    </center>
-</div>
+            // Hide all button groups
+            document.querySelectorAll('.btn-group-logs').forEach(el => el.classList.add('hide'));
 
-<div class="btn-group-logs hide" id="downloadErrorLogsBtnGroup"> 
-    <center>
-    <a href="/downloadErrorLogs" class="btn" id="downloadDetailedLogsBtn">Download Error Logs</a>
-
-    </center>
-</div>
- <script>
- function showSection(sectionId) {
-     // Hide all log sections and button groups
-     document.querySelectorAll('.logs').forEach(el => {
-         el.classList.add('hide');
-         el.classList.remove('centered');
-     });
-
-     // Hide all button groups
-     document.querySelectorAll('.btn-group-logs').forEach(el => el.classList.add('hide'));
-
-     // Show the relevant section and button groups based on the sectionId
-     if (sectionId === 'logs') {
-         document.getElementById('logs').classList.remove('hide');
-         document.getElementById('logs').classList.add('centered');
-         document.getElementById('backBtnAll').classList.remove('hide');
-     } else if (sectionId === 'errorLogs') {
-         document.getElementById('errorLogs').classList.remove('hide');
-         document.getElementById('errorLogs').classList.add('centered');
-         document.getElementById('downloadErrorLogsBtnGroup').classList.remove('hide'); // Show download button group for error logs
-         document.getElementById('downloadFilteredLogsBtnGroup').classList.add('hide'); // Ensure filtered button is hidden
-     } else if (sectionId === 'filteredLogs') {
-         document.getElementById('filteredLogs').classList.remove('hide');
-         document.getElementById('filteredLogs').classList.add('centered');
-         document.getElementById('downloadFilteredLogsBtnGroup').classList.remove('hide'); // Show button group for downloading filtered logs
-     }
- }
+            // Show the relevant section and button groups based on the sectionId
+            if (sectionId === 'logs') {
+                document.getElementById('logs').classList.remove('hide');
+                document.getElementById('logs').classList.add('centered');
+            } else if (sectionId === 'errorLogs') {
+                document.getElementById('errorLogs').classList.remove('hide');
+                document.getElementById('errorLogs').classList.add('centered');
+                document.getElementById('downloadErrorLogsBtnGroup').classList.remove('hide');
+            } else if (sectionId === 'filteredLogs') {
+                document.getElementById('filteredLogs').classList.remove('hide');
+                document.getElementById('filteredLogs').classList.add('centered');
+                document.getElementById('downloadFilteredLogsBtnGroup').classList.remove('hide');
+            }
+        }
 
         function showFilteredLogs(exceptionType) {
             const filteredLogsTitle = document.getElementById('filteredLogsTitle');
@@ -503,6 +589,7 @@
                 })
                 .catch(error => console.error('Error fetching filtered logs:', error));
         }
+
         // Initialize by hiding the Download Filtered Logs button group initially
         document.getElementById('downloadFilteredLogsBtnGroup').classList.add('hide'); // Hide button initially
         document.getElementById('downloadErrorLogsBtnGroup').classList.add('hide'); // Hide error logs button initially
