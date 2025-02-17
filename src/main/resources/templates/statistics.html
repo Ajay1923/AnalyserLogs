@@ -153,6 +153,10 @@
             <input type="date" id="to-date">
             <button id="filter-btn">Filter</button>
         </div>  --> 
+         <div class="toggle-btn-container">
+            <button id="toggle-individual-btn" onclick="toggleIndividualRows()">Show Individual Files</button>
+        </div>
+        
 
         <div class="log-container">
             <table>
@@ -178,7 +182,7 @@
                 </thead>
                 <tbody id="log-entries">
                     <th:block th:each="entry : ${statistics}">
-                        <tr>
+                       <tr th:classappend="${#strings.startsWith(entry.uploadedFileName, 'Folder: ')} ? 'aggregated-row' : 'individual-row'">
                             <td><a href="/chat" target="_blank">Advanced Search</a></td>
                             <td th:text="${entry.timestamp}"></td>
                             <td th:text="${entry.uploadedFileName}" target="_blank"></a></td>
@@ -252,6 +256,20 @@
     </div>
 
 <script>
+let showIndividual = false;
+
+function toggleIndividualRows() {
+    const individualRows = document.querySelectorAll('.individual-row');
+    const toggleBtn = document.getElementById('toggle-individual-btn');
+    
+    showIndividual = !showIndividual;
+    
+    individualRows.forEach(row => {
+        row.style.display = showIndividual ? 'table-row' : 'none';
+    });
+    
+    toggleBtn.textContent = showIndividual ? 'Hide Individual Files' : 'Show Individual Files';
+}
     document.getElementById('filter-btn').addEventListener('click', function() {
         const fromDate = document.getElementById('from-date').value;
         const toDate = document.getElementById('to-date').value;
