@@ -1,5 +1,6 @@
 package com.crud.demo.controller;
 
+import com.crud.demo.model.StatisticsEntry;
 import com.crud.demo.model.StatisticsFinal;
 
 
@@ -176,84 +177,146 @@ public class FileUploadController {
 		return null;
 	}
 
+    private Map<String, List<String>> logsPerFile = new HashMap<>();
+
     @PostMapping("/uploadFolder")
     public String uploadLogFolder(@RequestParam("logfolder") MultipartFile[] files, Model model) {
         Long userId = getCurrentUserId();
 
-        // Check if files are null or empty
         if (files == null || files.length == 0) {
             model.addAttribute("error", "Please select a folder containing log files.");
             return "webpage";
         }
+
         Map<String, List<String>> logsPerFile = new HashMap<>();
         List<String> allLines = new ArrayList<>();
         List<String> filenames = new ArrayList<>();
         StringBuilder downloadedExceptions = new StringBuilder();
         String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
 
+        // To track overall counts across all files
+        Map<String, Integer> aggregatedCounts = new HashMap<>();
+        Set<String> uniqueDownloadedExceptions = new HashSet<>();
+        Set<String> uniqueResultingFilenames = new HashSet<>();
+
         try {
             for (MultipartFile file : files) {
-                if (file.isEmpty()) continue;            
+                if (file.isEmpty()) continue;
                 String filename = file.getOriginalFilename();
                 filenames.add(filename);
-                // Read the file content and collect the lines
+
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
                     List<String> lines = reader.lines().collect(Collectors.toList());
                     allLines.addAll(lines);
                     logsPerFile.put(filename, lines);
+
+                    // Process each file individually
+                    Map<String, Integer> counts = countLogOccurrences(lines);
+                    Map<String, Integer> filteredCounts = counts.entrySet().stream()
+                        .filter(entry -> entry.getValue() > 0)
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+                    // Store unique exception types
+                    uniqueDownloadedExceptions.addAll(filteredCounts.keySet());
+                    uniqueResultingFilenames.addAll(filteredCounts.keySet());
+
+                    // Update aggregated counts
+                    for (Map.Entry<String, Integer> entry : filteredCounts.entrySet()) {
+                        aggregatedCounts.put(entry.getKey(), 
+                            aggregatedCounts.getOrDefault(entry.getKey(), 0) + entry.getValue());
+                    }
+
+                    // Save statistics for each file separately
+                    statisticsFinalService.saveStatistics(
+                        userId,
+                        filename,
+                        null,
+                        filteredCounts.getOrDefault("AccessException", 0),
+                        filteredCounts.getOrDefault("CloudClientException", 0),
+                        filteredCounts.getOrDefault("InvalidFormatException", 0),
+                        filteredCounts.getOrDefault("NullPointerException", 0),
+                        filteredCounts.getOrDefault("SchedulerException", 0),
+                        filteredCounts.getOrDefault("SuperCsvException", 0),
+                        filteredCounts.getOrDefault("ValidationException", 0),
+                        filteredCounts.getOrDefault("ERROR", 0),
+                        filteredCounts.getOrDefault("INFO", 0),
+                        filteredCounts.keySet().toString(),
+                        "Uploaded",
+                        String.join(", ", filteredCounts.keySet())
+                    );
                 }
             }
-            Map<String, Integer> counts = countLogOccurrences(allLines);
-            Map<String, Integer> filteredCounts = counts.entrySet().stream()
-                .filter(entry -> entry.getValue() > 0)
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-            allLogs = allLines;
-            detailedErrorLogs = extractDetailedErrorLogs(allLines);
 
+            // Save aggregated statistics (like in Implementation 1)
             String uploadedFileName = "Folder: " + String.join(", ", filenames);
-            // Save data into session or wherever needed
-            httpSession.setAttribute("logsPerFile", logsPerFile); 
+            String downloadedExceptionsStr = String.join(", ", uniqueDownloadedExceptions);
+            String resultingFilenamesStr = String.join(", ", uniqueResultingFilenames);
+            String resultingFileName = generateResultingFileName(uploadedFileName, "Statistics");
+
+            // Store data in session
+            httpSession.setAttribute("logsPerFile", logsPerFile);
             httpSession.setAttribute("uploadedFileName", uploadedFileName);
-            httpSession.setAttribute("logCounts", filteredCounts);
+            httpSession.setAttribute("logCounts", aggregatedCounts);
             httpSession.setAttribute("uploadTimestamp", timestamp);
-            httpSession.setAttribute("allLogs", allLogs);
-            httpSession.setAttribute("detailedErrorLogs", detailedErrorLogs);
-            httpSession.setAttribute("filenames", filenames); // Store file names in session
+            httpSession.setAttribute("allLogs", allLines);
+            httpSession.setAttribute("detailedErrorLogs", extractDetailedErrorLogs(allLines));
+            httpSession.setAttribute("filenames", filenames);
 
-            // Add model attributes for the view
-            model.addAttribute("filenames", filenames);
-            model.addAttribute("uploadedFileName", uploadedFileName);
-            model.addAttribute("counts", filteredCounts);
-            model.addAttribute("allLogs", allLogs);
-            model.addAttribute("detailedErrorLogs", detailedErrorLogs);
-            model.addAttribute("timestamp", timestamp);
-            model.addAttribute("filenames", filenames); // Add file names to the model
-
-            // Save statistics (your custom logic here)
+            // Save aggregated statistics for the entire upload session
             statisticsFinalService.saveStatistics(
                 userId,
                 uploadedFileName,
                 null,
-                filteredCounts.getOrDefault("AccessException", 0),
-                filteredCounts.getOrDefault("CloudClientException", 0),
-                filteredCounts.getOrDefault("InvalidFormatException", 0),
-                filteredCounts.getOrDefault("NullPointerException", 0),
-                filteredCounts.getOrDefault("SchedulerException", 0),
-                filteredCounts.getOrDefault("SuperCsvException", 0),
-                filteredCounts.getOrDefault("ValidationException", 0),
-                filteredCounts.getOrDefault("ERROR", 0),
-                filteredCounts.getOrDefault("INFO", 0),
-                filteredCounts.keySet().toString(),
+                aggregatedCounts.getOrDefault("AccessException", 0),
+                aggregatedCounts.getOrDefault("CloudClientException", 0),
+                aggregatedCounts.getOrDefault("InvalidFormatException", 0),
+                aggregatedCounts.getOrDefault("NullPointerException", 0),
+                aggregatedCounts.getOrDefault("SchedulerException", 0),
+                aggregatedCounts.getOrDefault("SuperCsvException", 0),
+                aggregatedCounts.getOrDefault("ValidationException", 0),
+                aggregatedCounts.getOrDefault("ERROR", 0),
+                aggregatedCounts.getOrDefault("INFO", 0),
+                aggregatedCounts.keySet().toString(),
                 "Uploaded",
-                String.join(", ", filteredCounts.keySet())
+                downloadedExceptionsStr
             );
+
+            // Add attributes to the model
+            model.addAttribute("filenames", filenames);
+            model.addAttribute("uploadedFileName", uploadedFileName);
+            model.addAttribute("counts", aggregatedCounts);
+            model.addAttribute("allLogs", allLines);
+            model.addAttribute("detailedErrorLogs", extractDetailedErrorLogs(allLines));
+            model.addAttribute("timestamp", timestamp);
 
         } catch (IOException e) {
             model.addAttribute("error", "Failed to process files: " + e.getMessage());
         }
 
-        return "webpage";  // Return the name of your webpage/view
+        return "webpage";
     }
+
+    @GetMapping("/getFileLogs")
+    @ResponseBody
+    public Map<String, Object> getFileLogs(@RequestParam String filename) {
+        Map<String, Object> response = new HashMap<>();
+        Map<String, List<String>> logsPerFile = (Map<String, List<String>>) httpSession.getAttribute("logsPerFile");
+        List<String> fileLogs = logsPerFile != null ? logsPerFile.get(filename) : null;
+
+        if (fileLogs != null) {
+            Map<String, Integer> counts = countLogOccurrences(fileLogs);
+            Map<String, Integer> filteredCounts = counts.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+            response.put("counts", filteredCounts);
+            response.put("detailedErrorLogs", extractDetailedErrorLogs(fileLogs));
+            response.put("allLogs", fileLogs);
+        }
+
+        return response;
+    }
+    
 
     @PostMapping("/searchExceptionData")
     public String searchExceptionData(@RequestParam("query") String query, Model model, HttpSession httpSession) {
@@ -543,6 +606,7 @@ public class FileUploadController {
         return detailedLogs;
     }
 
+
     private String generateResultingFileName(String baseName, String suffix) {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss");
         String timestamp = LocalDateTime.now().format(formatter);
@@ -586,10 +650,11 @@ public class FileUploadController {
 
 
     @GetMapping("/statistics")
-    public String statistics(Model model) {
+    public String statistics(Model model,HttpSession session) {
         Long userId = getCurrentUserId();
         List<StatisticsFinal> statisticsList = statisticsFinalService.getStatisticsByUserId(userId);
         model.addAttribute("statistics", statisticsList);
+    
 
         // Retrieve and display all resulting file names
         List<String> resultingFileNames = (List<String>) httpSession.getAttribute("resultingFileNames");
@@ -598,6 +663,10 @@ public class FileUploadController {
         List<String> downloadedFilenames = (List<String>) httpSession.getAttribute("downloadedFilenames");
         model.addAttribute("downloadedFilenames", downloadedFilenames != null ? downloadedFilenames : Collections.emptyList());
 
+        List<String> filenames = (List<String>) session.getAttribute("filenames");
+        if (filenames != null && !filenames.isEmpty()) {
+            model.addAttribute("filenames", filenames);
+        }
         return "statistics";
     }
     @GetMapping("/api/statistics")
@@ -627,6 +696,13 @@ public class FileUploadController {
 
         return statisticsFinalService.getStatisticsByUserId(userId); // If no date provided, return all data
     } 
+    
+    @GetMapping(value = "/api/statistics", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<StatisticsEntry>> getStatisticsJson(
+            @RequestParam(required = false) String selectedFile) {
+        List<StatisticsEntry> entries = StatisticsFinalService.getFilteredStatistics(selectedFile);
+        return ResponseEntity.ok(entries);
+    }
     @GetMapping("/filteredlogs")
     public String filteredLogs(@RequestParam("accessType") String accessType, 
                                @RequestParam("count") int count,
