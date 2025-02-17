@@ -437,7 +437,6 @@
         <button class="btn" onclick="showSection('errorLogs')">Show Detailed Error Logs</button>
     </div>
 </div>
-</div>
         
         <div id="logs" class="logs hide">
             <h2>All Logs</h2>
@@ -480,13 +479,19 @@
                 </tbody>
             </table>
         </div>
+<!-- <div class="btn-group-logs hide" id="downloadFilteredLogsBtnGroup">
+    <center>
+        <button id="downloadFilteredErrorLogsBtn" type="button" class="btn">Download Filtered Logs</button>
+        
+    </center>
+</div>-->
 
-        <div class="btn-group-logs hide" id="downloadErrorLogsBtnGroup"> 
-            <center>
-                <a href="/downloadErrorLogs" class="btn" id="downloadDetailedLogsBtn">Download Error Logs</a>
-            </center>
-        </div>
-    </div>
+<div class="btn-group-logs hide" id="downloadErrorLogsBtnGroup"> 
+    <center>
+    <a href="/downloadErrorLogs" class="btn" id="downloadDetailedLogsBtn">Download Error Logs</a>
+
+    </center>
+</div> 
 
     <script>
         function loadFileLogs(filename) {
