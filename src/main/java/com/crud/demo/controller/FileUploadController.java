@@ -191,103 +191,82 @@ public class FileUploadController {
         Map<String, List<String>> logsPerFile = new HashMap<>();
         List<String> allLines = new ArrayList<>();
         List<String> filenames = new ArrayList<>();
-        StringBuilder downloadedExceptions = new StringBuilder();
         String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-
-        // To track overall counts across all files
-        Map<String, Integer> aggregatedCounts = new HashMap<>();
-        Set<String> uniqueDownloadedExceptions = new HashSet<>();
-        Set<String> uniqueResultingFilenames = new HashSet<>();
 
         try {
             for (MultipartFile file : files) {
                 if (file.isEmpty()) continue;
                 String filename = file.getOriginalFilename();
                 filenames.add(filename);
-
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
                     List<String> lines = reader.lines().collect(Collectors.toList());
                     allLines.addAll(lines);
                     logsPerFile.put(filename, lines);
-
-                    // Process each file individually
-                    Map<String, Integer> counts = countLogOccurrences(lines);
-                    Map<String, Integer> filteredCounts = counts.entrySet().stream()
-                        .filter(entry -> entry.getValue() > 0)
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-                    // Store unique exception types
-                    uniqueDownloadedExceptions.addAll(filteredCounts.keySet());
-                    uniqueResultingFilenames.addAll(filteredCounts.keySet());
-
-                    // Update aggregated counts
-                    for (Map.Entry<String, Integer> entry : filteredCounts.entrySet()) {
-                        aggregatedCounts.put(entry.getKey(), 
-                            aggregatedCounts.getOrDefault(entry.getKey(), 0) + entry.getValue());
-                    }
-
-                    // Save statistics for each file separately
-                    statisticsFinalService.saveStatistics(
-                        userId,
-                        filename,
-                        null,
-                        filteredCounts.getOrDefault("AccessException", 0),
-                        filteredCounts.getOrDefault("CloudClientException", 0),
-                        filteredCounts.getOrDefault("InvalidFormatException", 0),
-                        filteredCounts.getOrDefault("NullPointerException", 0),
-                        filteredCounts.getOrDefault("SchedulerException", 0),
-                        filteredCounts.getOrDefault("SuperCsvException", 0),
-                        filteredCounts.getOrDefault("ValidationException", 0),
-                        filteredCounts.getOrDefault("ERROR", 0),
-                        filteredCounts.getOrDefault("INFO", 0),
-                        filteredCounts.keySet().toString(),
-                        "Uploaded",
-                        String.join(", ", filteredCounts.keySet())
-                    );
                 }
             }
 
-            // Save aggregated statistics (like in Implementation 1)
-            String uploadedFileName = "Folder: " + String.join(", ", filenames);
-            String downloadedExceptionsStr = String.join(", ", uniqueDownloadedExceptions);
-            String resultingFilenamesStr = String.join(", ", uniqueResultingFilenames);
-            String resultingFileName = generateResultingFileName(uploadedFileName, "Statistics");
+            Map<String, Integer> counts = countLogOccurrences(allLines);
+            Map<String, Integer> filteredCounts = counts.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-            // Store data in session
+            allLogs = allLines;
+            detailedErrorLogs = extractDetailedErrorLogs(allLines);
+
+            String uploadedFileName = "Folder: " + String.join(", ", filenames);
             httpSession.setAttribute("logsPerFile", logsPerFile);
             httpSession.setAttribute("uploadedFileName", uploadedFileName);
-            httpSession.setAttribute("logCounts", aggregatedCounts);
+            httpSession.setAttribute("logCounts", filteredCounts);
             httpSession.setAttribute("uploadTimestamp", timestamp);
-            httpSession.setAttribute("allLogs", allLines);
-            httpSession.setAttribute("detailedErrorLogs", extractDetailedErrorLogs(allLines));
+            httpSession.setAttribute("allLogs", allLogs);
+            httpSession.setAttribute("detailedErrorLogs", detailedErrorLogs);
             httpSession.setAttribute("filenames", filenames);
+         // Capture the exceptions downloaded
+            Set<String> uniqueDownloadedExceptions = new HashSet<>();
+            for (String exceptionType : filteredCounts.keySet()) {
+                if (filteredCounts.get(exceptionType) > 0) {
+                    uniqueDownloadedExceptions.add(exceptionType);
+                }
+            }
 
-            // Save aggregated statistics for the entire upload session
+            String downloadedExceptionsStr = String.join(", ", uniqueDownloadedExceptions);
+            
+            Set<String> uniqueResultingfilenames = new HashSet<>();
+            for (String resultingfilenames : filteredCounts.keySet()) {
+                if (filteredCounts.get(resultingfilenames) > 0) {
+                	uniqueResultingfilenames.add(resultingfilenames);
+                }
+            }
+
+            String resultingfilenamesStr = String.join(", ", uniqueResultingfilenames);
+            
+            String resultingFileName = generateResultingFileName(uploadedFileName, "Statistics");
+            
+            model.addAttribute("logsPerFile",logsPerFile);
+            model.addAttribute("filenames", filenames);
+            model.addAttribute("uploadedFileName", uploadedFileName);
+            model.addAttribute("counts", filteredCounts);
+            model.addAttribute("allLogs", allLogs);
+            model.addAttribute("detailedErrorLogs", detailedErrorLogs);
+            model.addAttribute("timestamp", timestamp);
+
             statisticsFinalService.saveStatistics(
                 userId,
                 uploadedFileName,
                 null,
-                aggregatedCounts.getOrDefault("AccessException", 0),
-                aggregatedCounts.getOrDefault("CloudClientException", 0),
-                aggregatedCounts.getOrDefault("InvalidFormatException", 0),
-                aggregatedCounts.getOrDefault("NullPointerException", 0),
-                aggregatedCounts.getOrDefault("SchedulerException", 0),
-                aggregatedCounts.getOrDefault("SuperCsvException", 0),
-                aggregatedCounts.getOrDefault("ValidationException", 0),
-                aggregatedCounts.getOrDefault("ERROR", 0),
-                aggregatedCounts.getOrDefault("INFO", 0),
-                aggregatedCounts.keySet().toString(),
+                filteredCounts.getOrDefault("AccessException", 0),
+                filteredCounts.getOrDefault("CloudClientException", 0),
+                filteredCounts.getOrDefault("InvalidFormatException", 0),
+                filteredCounts.getOrDefault("NullPointerException", 0),
+                filteredCounts.getOrDefault("SchedulerException", 0),
+                filteredCounts.getOrDefault("SuperCsvException", 0),
+                filteredCounts.getOrDefault("ValidationException", 0),
+                filteredCounts.getOrDefault("ERROR", 0),
+                filteredCounts.getOrDefault("INFO", 0),
+                filteredCounts.keySet().toString(),
                 "Uploaded",
-                downloadedExceptionsStr
+                String.join(", ", filteredCounts.keySet())
             );
-
-            // Add attributes to the model
-            model.addAttribute("filenames", filenames);
-            model.addAttribute("uploadedFileName", uploadedFileName);
-            model.addAttribute("counts", aggregatedCounts);
-            model.addAttribute("allLogs", allLines);
-            model.addAttribute("detailedErrorLogs", extractDetailedErrorLogs(allLines));
-            model.addAttribute("timestamp", timestamp);
 
         } catch (IOException e) {
             model.addAttribute("error", "Failed to process files: " + e.getMessage());
